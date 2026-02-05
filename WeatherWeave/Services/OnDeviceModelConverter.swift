@@ -32,7 +32,7 @@ class OnDeviceModelConverter: ObservableObject {
 
     @Published var state: ConversionState = .notStarted
 
-    private let modelName = "zimageapp/z-image-turbo-q4"
+    public let modelName = "Z-Image-Turbo Core ML"
     private let safetensorsURL = "https://huggingface.co/zimageapp/z-image-turbo-q4/resolve/main/model.safetensors"
     private let cacheDirectory: URL
     private let pythonConverter: URL

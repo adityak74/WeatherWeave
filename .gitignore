@@ -132,7 +132,6 @@ diffusion_pytorch_model.bin
 pytorch_model.bin
 
 # Generated Wallpapers
-*.png
 *.jpg
 *.jpeg
 !Assets.xcassets/**/*.png

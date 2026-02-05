@@ -15,7 +15,9 @@ struct SettingsView: View {
     @AppStorage("maxStoredWallpapers") private var maxStoredWallpapers: Int = 10
     @AppStorage("showNotifications") private var showNotifications: Bool = false
 
-    @EnvironmentObject var aiModelManager: AIModelManager
+    @StateObject private var modelConverter = OnDeviceModelConverter()
+    @State private var showConversionError = false
+    @State private var conversionError: String?
 
     var body: some View {
         Form {
@@ -59,28 +61,73 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
             }
 
-            Section("AI Models") {
-                LabeledContent("Model", value: aiModelManager.modelName)
-                LabeledContent("Status", value: aiModelManager.modelStatus.rawValue)
+            Section("Core ML Model") {
+                LabeledContent("Model", value: modelConverter.modelName)
+                LabeledContent("Status", value: modelConverter.state.description)
 
-                if aiModelManager.modelStatus == .downloading {
-                    ProgressView {
-                        Text("Downloading model... This may take several minutes.")
+                switch modelConverter.state {
+                case .downloading(let progress):
+                    ProgressView(value: progress) {
+                        Text("Downloading checkpoint from Hugging Face...")
+                    } currentValueLabel: {
+                        Text("\(Int(progress * 100))%")
                     }
-                    .progressViewStyle(.linear)
+
+                case .converting(let progress):
+                    ProgressView(value: progress) {
+                        Text("Converting to Core ML (this may take 2-3 minutes)...")
+                    } currentValueLabel: {
+                        Text("\(Int(progress * 100))%")
+                    }
+
+                case .error(let message):
+                    Text("Error: \(message)")
+                        .font(.caption)
+                        .foregroundColor(.red)
+
+                default:
+                    EmptyView()
                 }
 
                 Button {
-                    if aiModelManager.modelStatus == .downloading {
-                        // TODO: Implement cancel download functionality
-                    } else {
-                        aiModelManager.downloadModel()
+                    Task {
+                        do {
+                            try await modelConverter.downloadAndConvert()
+                        } catch {
+                            conversionError = error.localizedDescription
+                            showConversionError = true
+                        }
                     }
                 } label: {
-                    Text(aiModelManager.modelStatus == .downloading ? "Downloading..." : "Download AI Model")
+                    Text(buttonLabel)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(aiModelManager.modelStatus == .downloaded || aiModelManager.modelStatus == .downloading)
+                .disabled(isButtonDisabled)
+
+                if modelConverter.state == .completed {
+                    Text("✅ Model ready! Generate wallpapers at <1 second.")
+                        .font(.caption)
+                        .foregroundColor(.green)
+
+                    Text("First-time setup: Complete! All future generations will be instant.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                if modelConverter.state == .notStarted {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("First Time Setup:")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+
+                        Text("• Download: ~5GB (2-5 minutes)")
+                        Text("• Convert: 2-3 minutes (one-time)")
+                        Text("• Total: ~5-8 minutes")
+                        Text("• After: <1 second generation forever!")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                }
             }
 
             Section("About") {
@@ -91,8 +138,32 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 500) // Increased height to accommodate new section
+        .frame(width: 500, height: 600)
         .navigationTitle("Settings")
+        .alert("Conversion Error", isPresented: $showConversionError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(conversionError ?? "Unknown error occurred during conversion")
+        }
+    }
+
+    private var buttonLabel: String {
+        switch modelConverter.state {
+        case .downloading: return "Downloading..."
+        case .converting: return "Converting..."
+        case .completed: return "Model Ready"
+        case .error: return "Retry Download"
+        case .notStarted: return "Download & Convert Model"
+        }
+    }
+
+    private var isButtonDisabled: Bool {
+        switch modelConverter.state {
+        case .downloading, .converting, .completed:
+            return true
+        case .notStarted, .error:
+            return false
+        }
     }
 
     private func cleanupWallpapers() {
@@ -102,5 +173,4 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
-        .environmentObject(AIModelManager()) // Provide for preview
 }
