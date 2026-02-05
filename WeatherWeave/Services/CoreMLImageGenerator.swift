@@ -34,9 +34,9 @@ class CoreMLImageGenerator: ImageGeneratorProtocol {
     }
 
     init() {
-        // Look for Core ML model in Application Support
+        // Look for Core ML model in Application Support (same location as OnDeviceModelConverter)
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        self.modelURL = appSupport.appendingPathComponent("WeatherWeave/CoreML/ZImageTurbo-CoreML/Resources")
+        self.modelURL = appSupport.appendingPathComponent("WeatherWeave/Models/z-image-turbo.mlmodelc")
     }
 
     func generateImage(prompt: String, outputPath: String) async throws -> URL {
