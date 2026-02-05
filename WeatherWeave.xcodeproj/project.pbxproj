@@ -28,6 +28,7 @@
 		A1000019000000000000001 /* AIModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000019000000000000001 /* AIModelManager.swift */; };
 		A1000020000000000000001 /* OnDeviceModelConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000020000000000000001 /* OnDeviceModelConverter.swift */; };
 		A1000021000000000000001 /* CoreMLImageGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000021000000000000001 /* CoreMLImageGenerator.swift */; };
+		A1000022000000000000001 /* convert_checkpoint.py in Resources */ = {isa = PBXBuildFile; fileRef = A2000022000000000000001 /* convert_checkpoint.py */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +54,7 @@
 		A2000019000000000000001 /* AIModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIModelManager.swift; sourceTree = "<group>"; };
 		A2000020000000000000001 /* OnDeviceModelConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceModelConverter.swift; sourceTree = "<group>"; };
 		A2000021000000000000001 /* CoreMLImageGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreMLImageGenerator.swift; sourceTree = "<group>"; };
+		A2000022000000000000001 /* convert_checkpoint.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = convert_checkpoint.py; path = Scripts/convert_checkpoint.py; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +156,7 @@
 			isa = PBXGroup;
 			children = (
 				A2000017000000000000001 /* Assets.xcassets */,
+				A2000022000000000000001 /* convert_checkpoint.py */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -218,6 +221,7 @@
 			files = (
 				A1000017000000000000001 /* Assets.xcassets in Resources */,
 				A1000018000000000000001 /* Info.plist in Resources */,
+				A1000022000000000000001 /* convert_checkpoint.py in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
