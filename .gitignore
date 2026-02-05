@@ -145,3 +145,4 @@ pytorch_model.bin
 
 # Logs
 *.log
+CoreML/coreml-env/
