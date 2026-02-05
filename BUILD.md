@@ -7,11 +7,11 @@
 - Xcode 15.0 or later
 - Apple Silicon Mac (M1/M2/M3/M4) recommended
 - 8GB+ RAM
-- 5GB+ free storage for AI models
+- 5GB+ free storage for AI models (downloaded via app settings)
 
 ### Software Requirements
 - Xcode Command Line Tools
-- Python 3.10 or later
+- **Python 3.10 or later**: Required during build time for the bundling script.
 - Git
 
 ## Build Steps
@@ -23,25 +23,7 @@ git clone https://github.com/adityak74/WeatherWeave.git
 cd WeatherWeave
 ```
 
-### 2. Install Python Dependencies
-
-The app requires Python libraries for AI image generation:
-
-```bash
-# Make the installation script executable
-chmod +x Scripts/install_dependencies.sh
-
-# Run the installer
-./Scripts/install_dependencies.sh
-```
-
-This will:
-- Create a Python virtual environment at `~/.weatherweave-venv`
-- Install PyTorch with MPS (Metal Performance Shaders) support
-- Install Diffusers, Transformers, and other AI libraries
-- Optionally install MLX for Apple Silicon optimization
-
-### 3. Open the Project in Xcode
+### 2. Open the Project in Xcode
 
 ```bash
 open WeatherWeave.xcodeproj
@@ -51,6 +33,21 @@ Alternatively, launch Xcode and open the project:
 - File → Open
 - Navigate to `WeatherWeave.xcodeproj`
 - Click Open
+
+### 3. Add Python Bundling Build Phase (One-Time Setup)
+
+This step integrates the Python environment bundling directly into your Xcode build process.
+
+1.  **Select Project and Target**: In the Project Navigator (left pane), select the `WeatherWeave` project. Then, in the main editor area, select the `WeatherWeave` target.
+2.  **Navigate to Build Phases**: Click on the "Build Phases" tab.
+3.  **Add New Run Script Phase**:
+    *   Click the `+` button in the top left of the "Build Phases" pane.
+    *   Select "New Run Script Phase".
+4.  **Configure Script**:
+    *   Rename the new phase to "Bundle Python Environment".
+    *   Drag this phase to appear **after "Target Dependencies"** and **before "Compile Sources"**.
+    *   In the script text area, paste: `"${PROJECT_DIR}/Scripts/bundle_python_env.sh"`
+    *   Ensure "Run script only when installing" is **unchecked**.
 
 ### 4. Configure Code Signing (Optional)
 
@@ -66,7 +63,7 @@ For development builds, you may need to configure code signing:
 **Option A: Build from Xcode**
 - Select the "WeatherWeave" scheme
 - Choose "My Mac" as the destination
-- Press `Cmd+B` to build
+- Press `Cmd+B` to build. The Python environment will be bundled during this process.
 
 **Option B: Build from Command Line**
 ```bash
@@ -89,20 +86,19 @@ xcodebuild -scheme WeatherWeave -configuration Debug run
 open ~/Library/Developer/Xcode/DerivedData/WeatherWeave-*/Build/Products/Debug/WeatherWeave.app
 ```
 
-## First Launch
+## First Launch & AI Model Download
 
 When you first launch WeatherWeave:
 
-1. **Location Permission**: The app will request location permission
-   - Open System Settings → Privacy & Security → Location Services
-   - Enable WeatherWeave
-
-2. **Menu Bar Icon**: Click the cloud icon in your menu bar to access controls
-
-3. **Generate Wallpaper**:
-   - Select a theme (Cyberpunk, Nature, Abstract, or Minimal)
-   - Click "Generate Wallpaper"
-   - Wait 20-30 seconds for the first generation (downloading AI models)
+1.  **Location Permission**: The app will request location permission.
+    *   Open System Settings → Privacy & Security → Location Services
+    *   Enable WeatherWeave
+2.  **Menu Bar Icon**: Click the cloud icon in your menu bar to access controls.
+3.  **Download AI Model**:
+    *   Open the app's settings (from the menu bar icon).
+    *   Navigate to the "AI Models" section.
+    *   Click "Download AI Model" and wait for the download to complete. This can take several minutes due to the size of the model files (several gigabytes). A progress indicator will be shown.
+4.  Once the model is downloaded, you can trigger wallpaper generation.
 
 ## Build Configurations
 
@@ -126,21 +122,18 @@ xcodebuild -scheme WeatherWeave -configuration Release build
 
 ## Troubleshooting
 
+### Python Not Found During Build (Bundling Script Error)
+
+The `bundle_python_env.sh` script requires `python3` (version 3.10 or later) to be available in your system's PATH during the Xcode build process.
+
+*   **Solution**: Ensure Python 3.10+ is installed (e.g., via Homebrew: `brew install python@3.10`) and that it's correctly configured in your shell's PATH.
+
 ### Build Fails with "No such module"
 
 Ensure all Swift files are included in the target:
 1. Select a file in Project Navigator
 2. Check "Target Membership" in File Inspector
 3. Ensure "WeatherWeave" is checked
-
-### Python Script Not Found
-
-Verify the Scripts directory exists and has proper permissions:
-```bash
-ls -la Scripts/
-chmod +x Scripts/generate_image.py
-chmod +x Scripts/install_dependencies.sh
-```
 
 ### Location Permission Not Working
 
@@ -155,14 +148,6 @@ For local development, disable sandboxing temporarily:
 1. Select WeatherWeave target
 2. Go to "Signing & Capabilities"
 3. Remove "App Sandbox" capability (for testing only)
-
-### Python Dependencies Missing
-
-Reinstall Python dependencies:
-```bash
-rm -rf ~/.weatherweave-venv
-./Scripts/install_dependencies.sh
-```
 
 ## Development Workflow
 
@@ -223,12 +208,17 @@ WeatherWeave/
 ├── WeatherWeave/                  # Source code
 │   ├── App/                       # App entry point
 │   ├── Services/                  # Business logic
+│   │   └── AIModelManager.swift   # Manages AI model download & status
 │   ├── Models/                    # Data models
 │   ├── Views/                     # UI components
 │   ├── Utilities/                 # Helpers
 │   ├── Resources/                 # Assets
+│   │   ├── python/                # Bundled Python environment (after build)
+│   │   └── generate_image.py      # Bundled Python script (after build)
 │   └── WeatherWeave.entitlements  # App capabilities
-├── Scripts/                       # Python AI scripts
+├── Scripts/                       # Build/automation scripts
+│   ├── generate_image.py          # Z-Image wrapper script (source version)
+│   └── bundle_python_env.sh       # Script to bundle Python env into .app
 ├── BUILD.md                       # This file
 └── README.md                      # Project overview
 ```
@@ -238,7 +228,10 @@ WeatherWeave/
 - [Xcode Documentation](https://developer.apple.com/xcode/)
 - [SwiftUI Documentation](https://developer.apple.com/documentation/swiftui/)
 - [CoreLocation Framework](https://developer.apple.com/documentation/corelocation)
-- [Python Diffusers](https://huggingface.co/docs/diffusers)
+- [Hugging Face `diffusers`](https://huggingface.co/docs/diffusers)
+- [MLX](https://github.com/ml-explore)
+- [zimageapp/z-image-turbo-q4](https://huggingface.co/zimageapp/z-image-turbo-q4)
+- [Draw Things](https://drawthings.ai)
 
 ## Support
 

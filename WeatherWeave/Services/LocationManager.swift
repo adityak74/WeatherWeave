@@ -24,14 +24,16 @@ class LocationManager: NSObject, ObservableObject {
     }
 
     func requestAuthorization() {
-        locationManager.requestWhenInUseAuthorization()
+        locationManager.requestAlwaysAuthorization()
     }
 
     func getCurrentLocation() {
-        guard authorizationStatus == .authorized || authorizationStatus == .authorizedAlways else {
-            print("Location authorization not granted")
+        print("getCurrentLocation called, status: \(authorizationStatus.rawValue)")
+        guard authorizationStatus == .authorizedAlways else {
+            print("Location authorization not granted: \(authorizationStatus.rawValue)")
             return
         }
+        print("Requesting location...")
         locationManager.requestLocation()
     }
 
@@ -53,8 +55,9 @@ class LocationManager: NSObject, ObservableObject {
 extension LocationManager: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
+        print("Authorization status changed to: \(authorizationStatus.rawValue)")
 
-        if authorizationStatus == .authorized || authorizationStatus == .authorizedAlways {
+        if authorizationStatus == .authorizedAlways {
             getCurrentLocation()
         }
     }

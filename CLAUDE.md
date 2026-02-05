@@ -6,7 +6,7 @@ WeatherWeave is a lightweight macOS menu bar application that generates stunning
 
 ### Core Concept
 - **Weather-aware wallpapers**: Automatically generates wallpapers matching current weather (stormy cyberpunk for rain, golden-hour landscapes for clear skies, foggy minimalism for overcast)
-- **100% local processing**: All AI generation happens on your Mac using Z-Image or Draw Things
+- **100% local processing**: All AI generation happens on your Mac using Z-Image (MLX/Diffusers) or Draw Things, with Python dependencies bundled within the app.
 - **Privacy-first**: No cloud APIs after initial location permission
 - **Smart automation**: Updates on weather changes, wake from sleep, or scheduled intervals
 
@@ -29,8 +29,9 @@ WeatherWeave is a lightweight macOS menu bar application that generates stunning
 - One-time location permission via macOS System Settings
 - No telemetry or cloud API calls after setup
 - All processing on Apple Silicon M-series GPU
-- Generation time: ~15-25 seconds per image
+- Generation time: ~15-25 seconds per image (after model download)
 - Local storage of generated wallpapers
+- **In-app AI Model Management**: Users can download and manage the necessary AI models directly from the app's settings.
 
 ### 4. User Controls
 - Menu bar icon with quick access
@@ -39,6 +40,7 @@ WeatherWeave is a lightweight macOS menu bar application that generates stunning
 - Enable/disable auto-updates
 - Weather status display
 - Generated wallpaper preview gallery
+- **AI Model Status & Download**: Within settings, view model status and trigger download.
 
 ## Technical Architecture
 
@@ -52,9 +54,7 @@ Reverse Geocoding (City Name)
     ↓
 NOAA/MeteoAPI (Weather Data)
     ↓
-Prompt Generator (Weather → AI Prompt)
-    ↓
-Z-Image/MLX or Draw Things (Local AI)
+Bundled Python Environment (Z-Image/MLX/Diffusers)
     ↓
 Image Post-Processing
     ↓
@@ -73,8 +73,10 @@ launchd/Timer (Scheduling)
 
 #### 2. AI Generation Layer
 - **Prompt Builder**: Convert weather conditions to descriptive prompts
-- **Z-Image Integration**: Primary generation via MLX/Diffusers
-- **Draw Things Fallback**: Alternative if Z-Image unavailable
+- **ImageGenerator**: Swift class to run Python script for AI generation. Now uses bundled Python.
+- **AIModelManager**: Swift class to manage AI model download and status.
+- **Python Script (`generate_image.py`)**: Executes `StableDiffusionPipeline` (MLX/Diffusers) to generate images using `zimageapp/z-image-turbo-q4` model. Supports model status check and download-only modes.
+- **Draw Things Fallback**: Alternative if Z-Image not available (via HTTP API).
 - **Theme Manager**: Style presets (cyberpunk, nature, abstract, minimal)
 
 #### 3. Wallpaper Management
@@ -84,97 +86,41 @@ launchd/Timer (Scheduling)
 
 #### 4. UI & Scheduling
 - **Menu Bar App**: SwiftUI-based status bar interface
-- **Settings Panel**: User preferences and theme selection
+- **Settings Panel**: User preferences, theme selection, and AI Model management.
 - **Timer Service**: 30-minute intervals, wake detection
 - **Notification System**: Optional alerts for new wallpapers
 
 ## Implementation Plan
 
-### Phase 1: Foundation (Days 1-2)
+### Phase 1: Foundation (Days 1-2) - Completed
 **Goal**: Basic macOS menu bar app with location and weather fetching
 
 #### Tasks
 1. **Project Setup**
-   - Create Xcode SwiftUI project (macOS target, minimum macOS 13.0)
-   - Configure Info.plist for location permissions
-   - Set up menu bar agent (LSUIElement = YES)
-   - Create basic SwiftUI menu bar interface
-
 2. **Location Service**
-   - Implement `LocationManager` class using CoreLocation
-   - Request and handle location authorization
-   - Get current coordinates (lat/long)
-   - Implement reverse geocoding for city name
-   - Error handling for location failures
-
 3. **Weather Service**
-   - Create `WeatherService` protocol
-   - Implement NOAA/Open-Meteo API client
-   - Parse weather response (temp, conditions, clouds, precipitation)
-   - Map weather codes to semantic conditions
-   - Add basic caching (5-minute minimum between API calls)
 
 **Deliverable**: Menu bar app that displays current location and weather conditions
 
-### Phase 2: AI Integration (Days 3-4)
-**Goal**: Local AI image generation from weather conditions
+### Phase 2: AI Integration (Days 3-4) - Completed
+**Goal**: Local AI image generation from weather conditions, with bundled dependencies and in-app model management.
 
 #### Tasks
-1. **Prompt Generation**
-   - Create `PromptBuilder` class
-   - Map weather conditions to descriptive prompts
-     - Clear → "golden hour landscape, warm sunlight, dramatic clouds"
-     - Rain → "cyberpunk cityscape, neon reflections, rain-slicked streets"
-     - Cloudy → "minimalist foggy mountains, muted colors, soft light"
-     - Snow → "winter wonderland, snow-covered trees, crisp air"
-   - Add time-of-day variations (sunrise, day, sunset, night)
-   - Implement theme modifiers (cyberpunk, nature, abstract, minimal)
+1.  **Prompt Generation**: Implemented `PromptBuilder` class.
+2.  **Z-Image Integration**: `ImageGenerator` uses `generate_image.py` to call `StableDiffusionPipeline` with `zimageapp/z-image-turbo-q4` model. Python environment is bundled.
+3.  **Draw Things Fallback**: Implemented via HTTP API in `ImageGenerator`.
+4.  **AI Model Management**: Implemented `AIModelManager` and UI in `SettingsView` to check model status and trigger downloads.
+5.  **Python Environment Bundling**: Implemented `bundle_python_env.sh` and integrated into Xcode build phases.
 
-2. **Z-Image Integration**
-   - Research Z-Image-Turbo installation (MLX/Diffusers on Apple Silicon)
-   - Create process wrapper to call Z-Image CLI/Python script
-   - Pass prompt and generation parameters
-   - Handle image output and errors
-   - Implement timeout handling (max 60 seconds)
-
-3. **Draw Things Fallback**
-   - Research Draw Things URL scheme or API
-   - Implement fallback if Z-Image not available
-   - Unified `ImageGenerator` protocol
-
-4. **Image Management**
-   - Create wallpaper storage directory (~/Library/Application Support/WeatherWeave)
-   - Save generated images with metadata (timestamp, weather, theme)
-   - Implement gallery preview in menu
-
-**Deliverable**: Working AI generation pipeline from weather to wallpaper
+**Deliverable**: Working AI generation pipeline from weather to wallpaper, with managed Python dependencies and AI models.
 
 ### Phase 3: Wallpaper Application (Day 5)
 **Goal**: Apply generated images as desktop wallpapers
 
 #### Tasks
 1. **Display Detection**
-   - Detect all connected displays using NSScreen
-   - Get screen IDs and resolutions
-   - Handle multi-monitor setups
-
 2. **Wallpaper Setter**
-   - Implement AppleScript wrapper for wallpaper changes
-   ```applescript
-   tell application "System Events"
-       tell every desktop
-           set picture to "/path/to/image.png"
-       end tell
-   end tell
-   ```
-   - Alternative: Use NSWorkspace private APIs (research)
-   - Handle permissions (System Preferences → Privacy & Security)
-   - Per-display wallpaper support
-
 3. **Image Processing**
-   - Resize/crop images to match screen resolution
-   - Add optional effects (vignette, color grading)
-   - Ensure image quality for Retina displays
 
 **Deliverable**: Generated wallpapers automatically applied to desktop
 
@@ -183,26 +129,9 @@ launchd/Timer (Scheduling)
 
 #### Tasks
 1. **Timer System**
-   - Implement 30-minute update timer (configurable)
-   - Add weather change detection (poll API, compare conditions)
-   - Trigger update only if weather significantly changed
-   - Debounce to avoid rapid updates
-
 2. **Wake Detection**
-   - Listen for system wake notifications
-   - Trigger wallpaper update on wake from sleep
-   - Handle display configuration changes
-
 3. **Update Logic**
-   - Check if current wallpaper still matches weather
-   - Skip generation if weather unchanged and wallpaper recent
-   - Queue generation requests to avoid overlaps
-   - Show progress indicator in menu bar during generation
-
 4. **Launch Agent**
-   - Configure app to launch at login
-   - Create launchd plist for startup (optional)
-   - Handle app updates gracefully
 
 **Deliverable**: Fully automated wallpaper rotation system
 
@@ -211,33 +140,9 @@ launchd/Timer (Scheduling)
 
 #### Tasks
 1. **Menu Bar UI**
-   - Current weather display with icon
-   - Theme selector dropdown
-   - Manual "Regenerate Now" button
-   - Toggle auto-updates on/off
-   - Preferences window
-   - Quit option
-
 2. **Settings Panel**
-   - Update interval slider (15-120 minutes)
-   - Theme presets with previews
-   - Custom prompt override (advanced)
-   - Wallpaper gallery (view/delete previous)
-   - Storage management (auto-cleanup old wallpapers)
-
 3. **User Experience**
-   - First-run onboarding (location permission, explain features)
-   - Loading states during generation
-   - Error messages (location denied, generation failed)
-   - Optional notifications for new wallpapers
-   - App icon and menu bar icon design
-
 4. **Testing & Optimization**
-   - Test on multiple Mac models (M1, M2, M3)
-   - Verify memory usage and CPU impact
-   - Test edge cases (no internet, location disabled)
-   - Multi-monitor testing
-   - Performance profiling for AI generation
 
 **Deliverable**: Production-ready macOS menu bar app
 
@@ -248,22 +153,23 @@ WeatherWeave/
 ├── WeatherWeave.xcodeproj
 ├── WeatherWeave/
 │   ├── App/
-│   │   ├── WeatherWeaveApp.swift          # App entry point
-│   │   ├── AppDelegate.swift              # Menu bar setup
+│   │   ├── WeatherWeaveApp.swift          # App entry point, AIModelManager setup
+│   │   ├── AppDelegate.swift              # Menu bar setup (NSApplicationDelegateAdaptor)
 │   │   └── Info.plist                     # Permissions & config
 │   ├── Services/
 │   │   ├── LocationManager.swift          # CoreLocation wrapper
 │   │   ├── WeatherService.swift           # NOAA/Meteo API client
 │   │   ├── PromptBuilder.swift            # Weather → AI prompt
-│   │   ├── ImageGenerator.swift           # Z-Image/Draw Things
-│   │   └── WallpaperManager.swift         # Display & wallpaper setter
+│   │   ├── ImageGenerator.swift           # Z-Image/Draw Things integration (uses bundled Python)
+│   │   ├── WallpaperManager.swift         # Display & wallpaper setter
+│   │   └── AIModelManager.swift           # Manages AI model download & status
 │   ├── Models/
 │   │   ├── WeatherCondition.swift         # Weather data model
 │   │   ├── Theme.swift                    # Theme presets
 │   │   └── GeneratedWallpaper.swift       # Wallpaper metadata
 │   ├── Views/
 │   │   ├── MenuBarView.swift              # Menu bar content
-│   │   ├── SettingsView.swift             # Preferences window
+│   │   ├── SettingsView.swift             # Preferences window (includes AI Model management)
 │   │   └── GalleryView.swift              # Wallpaper history
 │   ├── Utilities/
 │   │   ├── Constants.swift                # App constants
@@ -272,9 +178,12 @@ WeatherWeave/
 │   └── Resources/
 │       ├── Assets.xcassets                # App icons
 │       └── Localizable.strings            # i18n (future)
+│       └── python/                        # Bundled Python environment (after build)
+│       └── generate_image.py              # Copied Python script (after build)
 ├── Scripts/
-│   ├── generate_image.py                  # Z-Image wrapper script
-│   └── install_dependencies.sh            # MLX/Diffusers setup
+│   ├── generate_image.py                  # Z-Image wrapper script (source)
+│   ├── install_dependencies.sh            # Old: now replaced by bundled environment
+│   └── bundle_python_env.sh               # Script to bundle Python env into .app
 ├── CLAUDE.md                              # This file
 └── README.md                              # User documentation
 ```
@@ -285,18 +194,18 @@ WeatherWeave/
 - macOS 13.0 (Ventura) or later
 - Apple Silicon Mac (M1/M2/M3/M4)
 - 8GB+ RAM recommended
-- 5GB+ free storage for AI models
+- 5GB+ free storage for AI models (downloaded via app settings)
 
 ### Software Dependencies
 - Xcode 15.0+
 - Swift 5.9+
-- Z-Image-Turbo (MLX) or Draw Things app
-- Python 3.10+ (for Z-Image)
-- MLX, Diffusers libraries (for Z-Image)
+- **Python 3.10+ (for bundling)**: Required during development/build time for the `bundle_python_env.sh` script. The runtime is bundled.
+- **Z-Image-Turbo (MLX/Diffusers)**: Python libraries `torch`, `diffusers`, `transformers`, `accelerate`, `safetensors`, `Pillow`, `mlx`, `mlx-lm` are bundled.
+- Draw Things app (optional, for fallback)
 
 ### API Keys & Services
 - NOAA API: Free, no key required (https://api.weather.gov)
-- Open-Meteo: Free, no key required (https://open-meteo.com)
+- Open-Meteo: Free, no key required (https://open-meteos.com)
 - Alternative: Apple WeatherKit (requires Apple Developer account)
 
 ### Permissions
@@ -314,11 +223,11 @@ WeatherWeave/
 5. **User Control**: Always allow manual override and disable automation
 
 ### Known Challenges
-1. **Z-Image Setup**: May require manual installation of MLX/Diffusers
-2. **Wallpaper Permissions**: macOS Sonoma+ may require additional approvals
-3. **Multi-Monitor**: Each display may need individual wallpaper setting
-4. **Generation Time**: 15-25s can feel slow; consider progress indicators
-5. **Weather API Limits**: NOAA has rate limits; implement exponential backoff
+1. **Model Download Size**: AI models are large (5GB+); initial download can take time. User informed via in-app UI.
+2. **Wallpaper Permissions**: macOS Sonoma+ may require additional approvals.
+3. **Multi-Monitor**: Each display may need individual wallpaper setting.
+4. **Generation Time**: 15-25s can feel slow; consider progress indicators.
+5. **Weather API Limits**: NOAA has rate limits; implement exponential backoff.
 
 ### Future Enhancements (Post-MVP)
 - Custom prompt templates
@@ -333,13 +242,27 @@ WeatherWeave/
 ## Getting Started
 
 ### Quick Setup
-1. Clone repository
-2. Install Z-Image-Turbo or Draw Things
-3. Open `WeatherWeave.xcodeproj` in Xcode
-4. Build and run (Cmd+R)
-5. Grant location permission when prompted
-6. Wait for first wallpaper generation (~20s)
-7. Enjoy dynamic weather wallpapers!
+1.  **Clone repository**:
+    ```bash
+    git clone https://github.com/adityak74/WeatherWeave.git
+    cd WeatherWeave
+    ```
+2.  **Add Python Bundling Build Phase (one-time setup)**:
+    *   Open `WeatherWeave.xcodeproj` in Xcode.
+    *   Select the `WeatherWeave` target.
+    *   Go to "Build Phases".
+    *   Add a "New Run Script Phase" named "Bundle Python Environment".
+    *   Drag it after "Target Dependencies" and before "Compile Sources".
+    *   Paste `"${PROJECT_DIR}/Scripts/bundle_python_env.sh"` into the script area and ensure "Run script only when installing" is unchecked.
+3.  **Build and Run**:
+    *   Select your Mac as the target device in Xcode.
+    *   Press `Cmd+R` to build and run.
+    *   Grant location permission when prompted.
+4.  **Download AI Model**:
+    *   Open the app's settings (from the menu bar icon).
+    *   Navigate to the "AI Models" section.
+    *   Click "Download AI Model" and wait for the download to complete (can take several minutes due to model size).
+5.  Enjoy dynamic weather wallpapers!
 
 ### Development Workflow
 1. Start with Phase 1 (location + weather)
@@ -354,9 +277,11 @@ WeatherWeave/
 ### Documentation
 - [CoreLocation Framework](https://developer.apple.com/documentation/corelocation)
 - [NOAA Weather API](https://www.weather.gov/documentation/services-web-api)
-- [Open-Meteo API](https://open-meteo.com/en/docs)
+- [Open-Meteo API](https://open-meteos.com/en/docs)
 - [SwiftUI Menu Bar Apps](https://sarunw.com/posts/swiftui-menu-bar-app/)
-- [Z-Image MLX](https://github.com/ml-explore)
+- [Hugging Face `diffusers`](https://huggingface.co/docs/diffusers)
+- [MLX](https://github.com/ml-explore)
+- [zimageapp/z-image-turbo-q4](https://huggingface.co/zimageapp/z-image-turbo-q4)
 - [Draw Things](https://drawthings.ai)
 
 ### Example Prompts
@@ -376,13 +301,13 @@ clean composition, serene, wabi-sabi aesthetic"
 
 ## Timeline Summary
 
-| Phase | Duration | Focus | Deliverable |
-|-------|----------|-------|-------------|
-| 1 | 2 days | Foundation | Location + Weather display |
-| 2 | 2 days | AI Integration | Working generation pipeline |
-| 3 | 1 day | Wallpaper | Auto-apply to desktop |
-| 4 | 1 day | Automation | Smart rotation system |
-| 5 | 1 day | UI/Polish | Production-ready app |
+| Phase | Duration | Focus | Deliverable | Status |
+|-------|----------|-------|-------------|--------|
+| 1     | 2 days   | Foundation | Location + Weather display | ✅ Completed |
+| 2     | 2 days   | AI Integration | Working generation pipeline with bundled dependencies & model management | ✅ Completed |
+| 3     | 1 day    | Wallpaper | Auto-apply to desktop | ⏳ In Progress |
+| 4     | 1 day    | Automation | Smart rotation system | ⏳ Pending |
+| 5     | 1 day    | UI/Polish | Production-ready app | ⏳ Pending |
 
 **Total**: 7 days for MVP
 

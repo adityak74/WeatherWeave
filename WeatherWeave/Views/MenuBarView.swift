@@ -141,11 +141,25 @@ struct MenuBarView: View {
     private func setupLocationManager() {
         locationManager.requestAuthorization()
 
-        // Observe location updates
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-            if locationManager.authorizationStatus == .authorized ||
-               locationManager.authorizationStatus == .authorizedAlways {
-                fetchWeather()
+        // Check authorization status periodically
+        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            print("Checking location authorization: \(self.locationManager.authorizationStatus.rawValue)")
+
+            if self.locationManager.authorizationStatus == .authorizedAlways {
+                timer.invalidate() // Stop the timer
+                print("Authorization granted, triggering location request")
+                self.locationManager.getCurrentLocation()
+
+                // Fetch weather after a short delay to allow location to be obtained
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    if self.locationManager.location != nil {
+                        self.fetchWeather()
+                    }
+                }
+            } else if self.locationManager.authorizationStatus == .denied ||
+                      self.locationManager.authorizationStatus == .restricted {
+                timer.invalidate()
+                self.errorMessage = "Location permission needed. Please grant in System Settings."
             }
         }
     }
