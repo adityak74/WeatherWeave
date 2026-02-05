@@ -25,6 +25,7 @@
 		A1000016000000000000001 /* AppleScriptRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016000000000000001 /* AppleScriptRunner.swift */; };
 		A1000017000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000017000000000000001 /* Assets.xcassets */; };
 		A1000018000000000000001 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A2000018000000000000001 /* Info.plist */; };
+		A1000019000000000000001 /* AIModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000019000000000000001 /* AIModelManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +48,7 @@
 		A2000016000000000000001 /* AppleScriptRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptRunner.swift; sourceTree = "<group>"; };
 		A2000017000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A2000018000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A2000019000000000000001 /* AIModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIModelManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -107,6 +109,7 @@
 				A2000005000000000000001 /* PromptBuilder.swift */,
 				A2000006000000000000001 /* ImageGenerator.swift */,
 				A2000007000000000000001 /* WallpaperManager.swift */,
+				A2000019000000000000001 /* AIModelManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -214,6 +217,9 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		A8000001000000000000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -235,6 +241,7 @@
 				A1000014000000000000001 /* Constants.swift in Sources */,
 				A1000015000000000000001 /* UserDefaults+Extensions.swift in Sources */,
 				A1000016000000000000001 /* AppleScriptRunner.swift in Sources */,
+				A1000019000000000000001 /* AIModelManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,7 +285,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -341,7 +348,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

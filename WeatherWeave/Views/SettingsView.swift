@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct SettingsView: View {
     @AppStorage("updateInterval") private var updateInterval: Double = 30.0
@@ -13,6 +14,8 @@ struct SettingsView: View {
     @AppStorage("updateOnWake") private var updateOnWake: Bool = true
     @AppStorage("maxStoredWallpapers") private var maxStoredWallpapers: Int = 10
     @AppStorage("showNotifications") private var showNotifications: Bool = false
+
+    @EnvironmentObject var aiModelManager: AIModelManager
 
     var body: some View {
         Form {
@@ -56,6 +59,30 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
             }
 
+            Section("AI Models") {
+                LabeledContent("Model", value: aiModelManager.modelName)
+                LabeledContent("Status", value: aiModelManager.modelStatus.rawValue)
+
+                if aiModelManager.modelStatus == .downloading {
+                    ProgressView {
+                        Text("Downloading model... This may take several minutes.")
+                    }
+                    .progressViewStyle(.linear)
+                }
+
+                Button {
+                    if aiModelManager.modelStatus == .downloading {
+                        // TODO: Implement cancel download functionality
+                    } else {
+                        aiModelManager.downloadModel()
+                    }
+                } label: {
+                    Text(aiModelManager.modelStatus == .downloading ? "Downloading..." : "Download AI Model")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(aiModelManager.modelStatus == .downloaded || aiModelManager.modelStatus == .downloading)
+            }
+
             Section("About") {
                 LabeledContent("Version", value: "1.0.0")
                 LabeledContent("Build", value: "1")
@@ -64,7 +91,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 450, height: 400)
+        .frame(width: 450, height: 500) // Increased height to accommodate new section
         .navigationTitle("Settings")
     }
 
@@ -75,4 +102,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView()
+        .environmentObject(AIModelManager()) // Provide for preview
 }

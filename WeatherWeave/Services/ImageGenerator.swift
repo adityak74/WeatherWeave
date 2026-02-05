@@ -13,12 +13,9 @@ protocol ImageGeneratorProtocol {
 }
 
 class ImageGenerator: ImageGeneratorProtocol {
-    private let scriptsPath: String
     private let timeout: TimeInterval = 60.0
 
-    init(scriptsPath: String = "~/WeatherWeave/Scripts") {
-        self.scriptsPath = (scriptsPath as NSString).expandingTildeInPath
-    }
+    init() {}
 
     func generateImage(prompt: String, outputPath: String) async throws -> URL {
         // First try Z-Image
@@ -32,15 +29,24 @@ class ImageGenerator: ImageGeneratorProtocol {
     }
 
     private func generateWithZImage(prompt: String, outputPath: String) async throws -> URL {
-        let scriptPath = "\(scriptsPath)/generate_image.py"
+        guard let resourcesPath = Bundle.main.resourceURL else {
+            throw ImageGenerationError.resourcePathNotFound
+        }
 
-        guard FileManager.default.fileExists(atPath: scriptPath) else {
+        let pythonExecutableURL = resourcesPath.appendingPathComponent("python/bin/python3")
+        let scriptURL = resourcesPath.appendingPathComponent("generate_image.py")
+
+        guard FileManager.default.fileExists(atPath: pythonExecutableURL.path) else {
+            throw ImageGenerationError.pythonExecutableNotFound(pythonExecutableURL.path)
+        }
+        
+        guard FileManager.default.fileExists(atPath: scriptURL.path) else {
             throw ImageGenerationError.scriptNotFound
         }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [scriptPath, prompt, outputPath]
+        process.executableURL = pythonExecutableURL
+        process.arguments = [scriptURL.path, prompt, outputPath]
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -75,9 +81,46 @@ class ImageGenerator: ImageGeneratorProtocol {
     }
 
     private func generateWithDrawThings(prompt: String, outputPath: String) async throws -> URL {
-        // TODO: Implement Draw Things integration via URL scheme or API
-        // For now, throw an error indicating this is not yet implemented
-        throw ImageGenerationError.drawThingsNotImplemented
+        // Default Draw Things API endpoint
+        guard let url = URL(string: "http://127.0.0.1:7860/sdapi/v1/txt2img") else {
+            throw ImageGenerationError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let payload: [String: Any] = [
+            "prompt": prompt,
+            "width": 1920,
+            "height": 1080,
+            "steps": 50,
+            "guidance_scale": 7.5
+        ]
+
+        let jsonData = try JSONSerialization.data(withJSONObject: payload)
+        request.httpBody = jsonData
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw ImageGenerationError.drawThingsAPIError("Invalid response from Draw Things API")
+        }
+
+        guard let jsonResponse = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let images = jsonResponse["images"] as? [String],
+              let base64Image = images.first else {
+            throw ImageGenerationError.invalidResponse
+        }
+
+        guard let imageData = Data(base64Encoded: base64Image) else {
+            throw ImageGenerationError.invalidImageData
+        }
+
+        let outputURL = URL(fileURLWithPath: outputPath)
+        try imageData.write(to: outputURL)
+
+        return outputURL
     }
 }
 
@@ -88,6 +131,12 @@ enum ImageGenerationError: Error, LocalizedError {
     case generationFailed(String)
     case imageNotCreated
     case drawThingsNotImplemented
+    case invalidURL
+    case drawThingsAPIError(String)
+    case invalidResponse
+    case invalidImageData
+    case resourcePathNotFound
+    case pythonExecutableNotFound(String)
 
     var errorDescription: String? {
         switch self {
@@ -101,6 +150,18 @@ enum ImageGenerationError: Error, LocalizedError {
             return "Generated image file not found"
         case .drawThingsNotImplemented:
             return "Draw Things integration not yet implemented"
+        case .invalidURL:
+            return "Invalid URL for Draw Things API"
+        case .drawThingsAPIError(let message):
+            return "Draw Things API error: \(message)"
+        case .invalidResponse:
+            return "Invalid response from Draw Things API"
+        case .invalidImageData:
+            return "Invalid image data from Draw Things API"
+        case .resourcePathNotFound:
+            return "Application resource path not found."
+        case .pythonExecutableNotFound(let path):
+            return "Python executable not found at: \(path). Please ensure Python is bundled correctly."
         }
     }
 }
