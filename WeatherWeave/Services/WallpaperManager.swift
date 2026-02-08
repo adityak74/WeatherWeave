@@ -54,7 +54,7 @@ class WallpaperManager: ObservableObject {
         let screens = NSScreen.screens
 
         for screen in screens {
-            try appleScriptRunner.setWallpaper(imagePath: wallpaper.imageURL.path, for: screen)
+            try NSWorkspace.shared.setDesktopImageURL(wallpaper.imageURL, for: screen, options: [:])
         }
 
         currentWallpaper = wallpaper

@@ -2,16 +2,17 @@
 //  CoreMLImageGenerator.swift
 //  WeatherWeave
 //
-//  Core ML-based image generation using Z-Image-Turbo
+//  Core ML-based image generation using Apple's ml-stable-diffusion
 //
 
 import Foundation
 import CoreML
 import AppKit
+import StableDiffusion
 
 class CoreMLImageGenerator: ImageGeneratorProtocol {
     private var pipeline: StableDiffusionPipeline?
-    private let modelURL: URL
+    private let modelDirectory: URL
 
     enum CoreMLError: Error, LocalizedError {
         case modelNotFound
@@ -34,13 +35,11 @@ class CoreMLImageGenerator: ImageGeneratorProtocol {
     }
 
     init() {
-        // Look for Core ML model in Application Support (same location as OnDeviceModelConverter)
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        self.modelURL = appSupport.appendingPathComponent("WeatherWeave/Models/z-image-turbo.mlmodelc")
+        self.modelDirectory = appSupport.appendingPathComponent("WeatherWeave/Models/CoreML")
     }
 
     func generateImage(prompt: String, outputPath: String) async throws -> URL {
-        // Initialize pipeline if not already done
         if pipeline == nil {
             try await initializePipeline()
         }
@@ -49,65 +48,70 @@ class CoreMLImageGenerator: ImageGeneratorProtocol {
             throw CoreMLError.modelNotFound
         }
 
-        // Configure generation parameters optimized for Z-Image-Turbo
-        let config = StableDiffusionPipeline.Configuration(
-            prompt: prompt,
-            negativePrompt: "blurry, low quality, distorted, watermark, text",
-            stepCount: 4,  // Z-Image-Turbo optimized for 4 steps
-            seed: UInt32.random(in: 0..<UInt32.max),
-            guidanceScale: 0.0,  // Turbo models work best with 0 guidance
-            disableSafety: true,
-            imageCount: 1
-        )
+        var config = StableDiffusionPipeline.Configuration(prompt: prompt)
+        config.negativePrompt = "blurry, low quality, distorted, watermark, text"
+        config.stepCount = 12
+        config.seed = UInt32.random(in: 0..<UInt32.max)
+        config.guidanceScale = 7.5
+        config.disableSafety = true
+        config.imageCount = 1
 
-        do {
-            print("Generating image with Core ML...")
-            print("Prompt: \(prompt)")
+        print("Generating image with Core ML...")
+        print("Prompt: \(prompt)")
 
-            let result = try await pipeline.generateImages(configuration: config)
-
-            guard let cgImage = result.first else {
-                throw CoreMLError.noImageGenerated
+        let images: [CGImage?] = try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let result = try pipeline.generateImages(configuration: config) { _ in true }
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
-
-            // Save to disk
-            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-            guard let tiffData = nsImage.tiffRepresentation,
-                  let bitmapRep = NSBitmapImageRep(data: tiffData),
-                  let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
-                throw CoreMLError.noImageGenerated
-            }
-
-            let url = URL(fileURLWithPath: outputPath)
-            try pngData.write(to: url)
-
-            print("✅ Image generated successfully: \(outputPath)")
-            return url
-
-        } catch {
-            throw CoreMLError.generationFailed(error)
         }
+
+        guard let firstOptional = images.first, let cgImage = firstOptional else {
+            throw CoreMLError.noImageGenerated
+        }
+
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        guard let tiffData = nsImage.tiffRepresentation,
+              let bitmapRep = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
+            throw CoreMLError.noImageGenerated
+        }
+
+        let url = URL(fileURLWithPath: outputPath)
+        try pngData.write(to: url)
+
+        print("✅ Image generated successfully: \(outputPath)")
+        return url
     }
 
     private func initializePipeline() async throws {
-        print("Initializing Core ML pipeline...")
-        print("Model location: \(modelURL.path)")
+        print("Initializing Core ML pipeline from: \(modelDirectory.path)")
 
-        // Check if model exists
-        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+        // Check for key model component, not just the directory
+        let textEncoderPath = modelDirectory.appendingPathComponent("TextEncoder.mlmodelc")
+        guard FileManager.default.fileExists(atPath: textEncoderPath.path) else {
+            print("Model check failed — TextEncoder.mlmodelc not found at: \(textEncoderPath.path)")
+            // Clean up empty/partial directory so the user can retry download
+            if FileManager.default.fileExists(atPath: modelDirectory.path) {
+                try? FileManager.default.removeItem(at: modelDirectory)
+            }
             throw CoreMLError.modelNotFound
         }
 
-        // Configure Core ML
         let config = MLModelConfiguration()
-        config.computeUnits = .all  // Use CPU + GPU + Neural Engine
+        config.computeUnits = .cpuAndGPU
 
         do {
             self.pipeline = try StableDiffusionPipeline(
-                resourcesAt: modelURL,
+                resourcesAt: modelDirectory,
+                controlNet: [],
                 configuration: config,
                 disableSafety: true,
-                reduceMemory: false
+                reduceMemory: true
             )
             print("✅ Core ML pipeline initialized")
         } catch {
@@ -116,32 +120,7 @@ class CoreMLImageGenerator: ImageGeneratorProtocol {
     }
 
     func isModelDownloaded() -> Bool {
-        return FileManager.default.fileExists(atPath: modelURL.path)
-    }
-}
-
-// MARK: - StableDiffusionPipeline Wrapper
-// This is a placeholder that mimics Apple's StableDiffusion framework
-// The actual implementation will come from the ml-stable-diffusion Swift package
-
-private class StableDiffusionPipeline {
-    struct Configuration {
-        let prompt: String
-        let negativePrompt: String
-        let stepCount: Int
-        let seed: UInt32
-        let guidanceScale: Float
-        let disableSafety: Bool
-        let imageCount: Int
-    }
-
-    init(resourcesAt url: URL, configuration: MLModelConfiguration, disableSafety: Bool, reduceMemory: Bool) throws {
-        // Placeholder - will be replaced with actual Apple ml-stable-diffusion code
-        throw NSError(domain: "CoreML", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not yet implemented - awaiting model conversion"])
-    }
-
-    func generateImages(configuration: Configuration) async throws -> [CGImage] {
-        // Placeholder - will be replaced with actual Apple ml-stable-diffusion code
-        throw NSError(domain: "CoreML", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not yet implemented - awaiting model conversion"])
+        let textEncoderPath = modelDirectory.appendingPathComponent("TextEncoder.mlmodelc")
+        return FileManager.default.fileExists(atPath: textEncoderPath.path)
     }
 }

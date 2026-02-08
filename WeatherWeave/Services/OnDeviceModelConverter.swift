@@ -2,14 +2,13 @@
 //  OnDeviceModelConverter.swift
 //  WeatherWeave
 //
-//  Converts .safetensors checkpoint to Core ML on-device (Draw Things approach)
+//  Downloads Apple's pre-converted Core ML Stable Diffusion model
+//  from Hugging Face file by file
 //
 
 import Foundation
 import Combine
 
-/// Handles on-device conversion of Stable Diffusion checkpoints to Core ML
-/// Similar to how Draw Things and other apps do it
 class OnDeviceModelConverter: ObservableObject {
 
     enum ConversionState: Equatable {
@@ -21,9 +20,9 @@ class OnDeviceModelConverter: ObservableObject {
 
         var description: String {
             switch self {
-            case .notStarted: return "Ready"
-            case .downloading(let progress): return "Downloading model... \(Int(progress * 100))%"
-            case .converting(let progress): return "Converting to Core ML... \(Int(progress * 100))%"
+            case .notStarted: return "Not Downloaded"
+            case .downloading(let progress): return "Downloading... \(Int(progress * 100))%"
+            case .converting: return "Installing..."
             case .completed: return "Ready"
             case .error(let msg): return "Error: \(msg)"
             }
@@ -32,143 +31,122 @@ class OnDeviceModelConverter: ObservableObject {
 
     @Published var state: ConversionState = .notStarted
 
-    public let modelName = "Z-Image-Turbo Core ML"
-    private let safetensorsURL = "https://huggingface.co/zimageapp/z-image-turbo-q4/resolve/main/model.safetensors"
+    public let modelName = "Stable Diffusion 2.1 (Core ML)"
+
+    private let repoID = "apple/coreml-stable-diffusion-2-1-base"
+    private let repoSubPath = "split_einsum/compiled"
     private let cacheDirectory: URL
-    private let pythonConverter: URL
 
     init() {
-        // Set up cache directory
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         self.cacheDirectory = appSupport.appendingPathComponent("WeatherWeave/Models")
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-
-        // Python converter script location
-        guard let resourcesPath = Bundle.main.resourceURL else {
-            fatalError("Could not find resources path")
-        }
-        self.pythonConverter = resourcesPath.appendingPathComponent("convert_checkpoint.py")
-
         checkCachedModel()
     }
 
-    /// Check if Core ML model is already cached
     func checkCachedModel() {
-        let coremlPath = cacheDirectory.appendingPathComponent("z-image-turbo.mlmodelc")
-        if FileManager.default.fileExists(atPath: coremlPath.path) {
+        let textEncoderPath = cacheDirectory.appendingPathComponent("CoreML/TextEncoder.mlmodelc")
+        if FileManager.default.fileExists(atPath: textEncoderPath.path) {
             state = .completed
         } else {
             state = .notStarted
         }
     }
 
-    /// Download checkpoint and convert to Core ML
     func downloadAndConvert() async throws {
-        // Step 1: Download .safetensors file
         await MainActor.run { state = .downloading(progress: 0.0) }
 
-        let checkpointPath = try await downloadCheckpoint()
+        let destination = cacheDirectory.appendingPathComponent("CoreML")
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
 
-        // Step 2: Convert to Core ML
-        await MainActor.run { state = .converting(progress: 0.0) }
+        let files = try await listAllFiles()
+        let totalFiles = Double(files.count)
 
-        try await convertToCoreML(checkpointPath: checkpointPath)
+        for (index, file) in files.enumerated() {
+            let relativePath = String(file.path.dropFirst(repoSubPath.count + 1))
+            let localURL = destination.appendingPathComponent(relativePath)
+            try await downloadFile(hfPath: file.path, to: localURL)
 
-        // Step 3: Clean up checkpoint file (save space)
-        try? FileManager.default.removeItem(at: checkpointPath)
+            let progress = Double(index + 1) / totalFiles
+            await MainActor.run { self.state = .downloading(progress: progress) }
+        }
 
         await MainActor.run { state = .completed }
     }
 
-    private func downloadCheckpoint() async throws -> URL {
-        guard let url = URL(string: safetensorsURL) else {
+    // MARK: - Private
+
+    private struct HFFile: Codable {
+        let type: String
+        let path: String
+        let size: Int?
+    }
+
+    private func listAllFiles() async throws -> [HFFile] {
+        let urlString = "https://huggingface.co/api/models/\(repoID)/tree/main/\(repoSubPath)?recursive=1"
+        guard let url = URL(string: urlString) else {
             throw ConversionError.invalidURL
         }
 
-        let destination = cacheDirectory.appendingPathComponent("checkpoint.safetensors")
+        var request = URLRequest(url: url)
+        request.setValue("WeatherWeave/1.0", forHTTPHeaderField: "User-Agent")
 
-        // Use URLSession to download with progress
-        let (tempURL, response) = try await URLSession.shared.download(from: url)
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
             throw ConversionError.downloadFailed
         }
 
-        // Move to permanent location
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: tempURL, to: destination)
-
-        return destination
+        let files = try JSONDecoder().decode([HFFile].self, from: data)
+        return files.filter { $0.type == "file" }
     }
 
-    private func convertToCoreML(checkpointPath: URL) async throws {
-        // Run Python conversion script
-        guard FileManager.default.fileExists(atPath: pythonConverter.path) else {
-            throw ConversionError.converterNotFound
+    private func downloadFile(hfPath: String, to localURL: URL) async throws {
+        let encodedPath = hfPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? hfPath
+        let urlString = "https://huggingface.co/\(repoID)/resolve/main/\(encodedPath)"
+        guard let url = URL(string: urlString) else {
+            throw ConversionError.invalidURL
         }
 
-        let outputPath = cacheDirectory.appendingPathComponent("z-image-turbo.mlmodelc")
+        let parentDir = localURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        process.arguments = [
-            pythonConverter.path,
-            checkpointPath.path,
-            outputPath.path,
-            "--compute-unit", "ALL",
-            "--quantize", "6"
-        ]
+        var request = URLRequest(url: url)
+        request.setValue("WeatherWeave/1.0", forHTTPHeaderField: "User-Agent")
 
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+        let (tempURL, response) = try await URLSession.shared.download(for: request)
 
-        // Monitor output for progress
-        let outputHandle = outputPipe.fileHandleForReading
-        outputHandle.readabilityHandler = { handle in
-            let data = handle.availableData
-            if let output = String(data: data, encoding: .utf8) {
-                self.parseConversionProgress(output)
-            }
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw ConversionError.downloadFailed
         }
 
-        try process.run()
-        process.waitUntilExit()
-
-        outputHandle.readabilityHandler = nil
-
-        guard process.terminationStatus == 0 else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            throw ConversionError.conversionFailed(errorMessage)
+        if FileManager.default.fileExists(atPath: localURL.path) {
+            try FileManager.default.removeItem(at: localURL)
         }
-    }
-
-    private func parseConversionProgress(_ output: String) {
-        // Parse progress from Python script output
-        // Example: "Converting layer 5/12..."
-        if let match = output.range(of: #"(\d+)/(\d+)"#, options: .regularExpression) {
-            let numbers = output[match].split(separator: "/")
-            if numbers.count == 2,
-               let current = Double(numbers[0]),
-               let total = Double(numbers[1]) {
-                let progress = current / total
-                Task { @MainActor in
-                    if case .converting = self.state {
-                        self.state = .converting(progress: progress)
-                    }
-                }
-            }
-        }
+        try FileManager.default.moveItem(at: tempURL, to: localURL)
     }
 
     func getCoreMLModelPath() -> URL? {
-        let path = cacheDirectory.appendingPathComponent("z-image-turbo.mlmodelc")
+        let path = cacheDirectory.appendingPathComponent("CoreML")
         return FileManager.default.fileExists(atPath: path.path) ? path : nil
+    }
+}
+
+// MARK: - FileManager ZIP extraction (kept for compatibility)
+extension FileManager {
+    func unzipItem(at sourceURL: URL, to destinationURL: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-o", sourceURL.path, "-d", destinationURL.path]
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "FileManager", code: 3,
+                         userInfo: [NSLocalizedDescriptionKey: "Failed to extract ZIP file"])
+        }
     }
 }
 
@@ -184,11 +162,11 @@ enum ConversionError: Error, LocalizedError {
         case .invalidURL:
             return "Invalid model URL"
         case .downloadFailed:
-            return "Failed to download model checkpoint"
+            return "Failed to download model from Hugging Face"
         case .converterNotFound:
-            return "Conversion script not found in app bundle"
+            return "Converter not found"
         case .conversionFailed(let message):
-            return "Conversion failed: \(message)"
+            return "Installation failed: \(message)"
         }
     }
 }
