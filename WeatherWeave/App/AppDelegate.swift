@@ -8,6 +8,23 @@
 import Cocoa
 import SwiftUI
 
+/// Holds strong references to programmatically opened windows so they aren't
+/// released while visible, preventing crashes on close.
+class WindowStore: NSObject, NSWindowDelegate {
+    static let shared = WindowStore()
+    private var controllers: [NSWindowController] = []
+
+    func add(_ controller: NSWindowController) {
+        controller.window?.delegate = self
+        controllers.append(controller)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        controllers.removeAll { $0.window === window }
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?

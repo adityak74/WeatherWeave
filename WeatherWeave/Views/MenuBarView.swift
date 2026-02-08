@@ -119,12 +119,12 @@ struct MenuBarView: View {
 
             HStack {
                 Button("Gallery") {
-                    showGallery = true
+                    openWindow(rootView: GalleryView(wallpaperManager: wallpaperManager), title: "Gallery", size: NSSize(width: 600, height: 500))
                 }
                 .buttonStyle(.bordered)
 
                 Button("Settings") {
-                    showSettings = true
+                    openWindow(rootView: SettingsView(), title: "WeatherWeave Settings", size: NSSize(width: 520, height: 620))
                 }
                 .buttonStyle(.bordered)
 
@@ -136,6 +136,22 @@ struct MenuBarView: View {
                 .buttonStyle(.bordered)
             }
         }
+    }
+
+    private func openWindow<V: View>(rootView: V, title: String, size: NSSize) {
+        let controller = NSWindowController(window: NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        ))
+        controller.window?.title = title
+        controller.window?.contentViewController = NSHostingController(rootView: rootView)
+        controller.window?.isReleasedWhenClosed = false
+        controller.window?.center()
+        controller.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        WindowStore.shared.add(controller)
     }
 
     private func setupLocationManager() {
@@ -190,7 +206,7 @@ struct MenuBarView: View {
                 let prompt = promptBuilder.buildPrompt(for: weather, theme: selectedTheme, timeOfDay: timeOfDay)
 
                 let outputPath = NSTemporaryDirectory() + "wallpaper_\(Date().timeIntervalSince1970).png"
-                let imageGenerator = ImageGenerator()
+                let imageGenerator = CoreMLImageGenerator()
                 let imageURL = try await imageGenerator.generateImage(prompt: prompt, outputPath: outputPath)
 
                 let wallpaper = try wallpaperManager.saveWallpaper(imageURL: imageURL, weather: weather, theme: selectedTheme)

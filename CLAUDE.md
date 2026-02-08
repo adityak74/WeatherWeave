@@ -6,7 +6,7 @@ WeatherWeave is a lightweight macOS menu bar application that generates stunning
 
 ### Core Concept
 - **Weather-aware wallpapers**: Automatically generates wallpapers matching current weather (stormy cyberpunk for rain, golden-hour landscapes for clear skies, foggy minimalism for overcast)
-- **100% local processing**: All AI generation happens on your Mac using Z-Image (MLX/Diffusers) or Draw Things, with Python dependencies bundled within the app.
+- **100% local processing**: All AI generation happens on your Mac using native Core ML (apple/ml-stable-diffusion). No Python required.
 - **Privacy-first**: No cloud APIs after initial location permission
 - **Smart automation**: Updates on weather changes, wake from sleep, or scheduled intervals
 
@@ -16,20 +16,20 @@ WeatherWeave is a lightweight macOS menu bar application that generates stunning
 - CoreLocation framework integration for precise lat/long positioning
 - Reverse geocoding to determine nearest city name
 - Weather data from NOAA/MeteoAPI (temp, precipitation, cloud coverage, conditions)
-- Automatic wallpaper generation via Z-Image-Turbo (MLX/Diffusers) or Draw Things API
+- Automatic wallpaper generation via Core ML pipeline (Stable Diffusion 2.1)
 
 ### 2. Smart Rotation System
 - Wallpaper updates every 30 minutes (configurable)
 - Triggers on system wake from sleep
 - Weather condition change detection
-- Multi-monitor support using `osascript` wallpaper setter
+- Multi-monitor support using `NSWorkspace.setDesktopImageURL`
 - Intelligent caching to avoid redundant generations
 
 ### 3. Privacy & Offline Operation
 - One-time location permission via macOS System Settings
 - No telemetry or cloud API calls after setup
 - All processing on Apple Silicon M-series GPU
-- Generation time: ~15-25 seconds per image (after model download)
+- Generation time: ~30-60 seconds first run (pipeline load), faster after warm-up
 - Local storage of generated wallpapers
 - **In-app AI Model Management**: Users can download and manage the necessary AI models directly from the app's settings.
 
@@ -52,15 +52,15 @@ CoreLocation (Geolocation)
     ↓
 Reverse Geocoding (City Name)
     ↓
-NOAA/MeteoAPI (Weather Data)
+Open-Meteo (Weather Data)
     ↓
-Bundled Python Environment (Z-Image/MLX/Diffusers)
+apple/ml-stable-diffusion (Core ML, native Swift)
     ↓
 Image Post-Processing
     ↓
-osascript (Set Wallpaper)
+NSWorkspace (Set Wallpaper)
     ↓
-launchd/Timer (Scheduling)
+Timer (Scheduling)
 ```
 
 ### Key Components
@@ -73,16 +73,14 @@ launchd/Timer (Scheduling)
 
 #### 2. AI Generation Layer
 - **Prompt Builder**: Convert weather conditions to descriptive prompts
-- **ImageGenerator**: Swift class to run Python script for AI generation. Now uses bundled Python.
-- **AIModelManager**: Swift class to manage AI model download and status.
-- **Python Script (`generate_image.py`)**: Executes `StableDiffusionPipeline` (MLX/Diffusers) to generate images using `zimageapp/z-image-turbo-q4` model. Supports model status check and download-only modes.
-- **Draw Things Fallback**: Alternative if Z-Image not available (via HTTP API).
+- **CoreMLImageGenerator**: Swift class using `StableDiffusionPipeline` from apple/ml-stable-diffusion
+- **OnDeviceModelConverter**: Downloads `apple/coreml-stable-diffusion-2-1-base` (split_einsum/compiled) from Hugging Face file-by-file (~4.3GB), installs to `~/Library/Application Support/WeatherWeave/Models/CoreML/`
 - **Theme Manager**: Style presets (cyberpunk, nature, abstract, minimal)
 
 #### 3. Wallpaper Management
 - **Image Cache**: Store generated wallpapers with metadata
 - **Display Manager**: Multi-monitor detection and wallpaper application
-- **AppleScript Bridge**: System wallpaper setter via `osascript`
+- **NSWorkspace**: System wallpaper setter via `setDesktopImageURL(_:for:options:)`
 
 #### 4. UI & Scheduling
 - **Menu Bar App**: SwiftUI-based status bar interface
@@ -103,25 +101,23 @@ launchd/Timer (Scheduling)
 **Deliverable**: Menu bar app that displays current location and weather conditions
 
 ### Phase 2: AI Integration (Days 3-4) - ✅ Completed
-**Goal**: Native Core ML image generation from weather conditions using on-device conversion.
+**Goal**: Native Core ML image generation from weather conditions.
 
 #### Completed Tasks
-1.  **Prompt Generation**: ✅ Implemented `PromptBuilder` class with weather-aware prompts
-2.  **Core ML Integration**: ✅ Native Apple Silicon generation (replaces Python approach)
-    - `OnDeviceModelConverter.swift` - Downloads and converts models on-device
-    - `CoreMLImageGenerator.swift` - Uses Core ML for generation (<1s vs 15-30s)
-    - `convert_checkpoint.py` - Converts .safetensors to Core ML with quantization
-3.  **Draw Things Approach**: ✅ Industry-standard on-device conversion
-    - Downloads .safetensors from Hugging Face (~5GB)
-    - Converts to Core ML on first use (one-time, 2-3 min)
-    - Caches result permanently (~4GB quantized)
-4.  **Model Management**: ✅ UI in `SettingsView` for download and conversion progress
-5.  **Performance**: ✅ 10x faster generation, 93% smaller app size
+1.  **Prompt Generation**: ✅ `PromptBuilder` with weather-aware prompts
+2.  **Core ML Integration**: ✅ `CoreMLImageGenerator` uses `apple/ml-stable-diffusion` Swift package
+    - Model: `apple/coreml-stable-diffusion-2-1-base` (split_einsum/compiled, ~4.3GB)
+    - Downloaded file-by-file from Hugging Face API via `OnDeviceModelConverter`
+    - Stored at `~/Library/Application Support/WeatherWeave/Models/CoreML/`
+    - Pipeline config: `cpuAndGPU`, `reduceMemory: true`, 12 steps
+3.  **Model Management**: ✅ UI in `SettingsView` with real download progress
+4.  **Wallpaper setter**: ✅ `NSWorkspace.setDesktopImageURL` (no AppleScript needed)
+5.  **Window management**: ✅ `WindowStore` holds NSWindowController references to prevent close crashes
 
-**Architecture Decision**: Switched from Python bundling to Core ML for better UX
-- **Before**: 700MB app with Python + PyTorch + MLX
-- **After**: 50MB app with on-device Core ML conversion
-- **Benefits**: Faster generation, smaller downloads, native performance
+**Architecture Decision**: Native Core ML, no Python runtime
+- **App size**: ~50MB (model downloaded separately at first run)
+- **Model**: 4.3GB one-time download, cached permanently
+- **Generation**: 30-60s (pipeline load + inference), faster after warm-up
 
 **Deliverable**: Production-ready Core ML pipeline matching industry apps like Draw Things.
 
@@ -130,9 +126,10 @@ launchd/Timer (Scheduling)
 
 #### Completed Tasks
 1. **Display Detection**: ✅ Multi-monitor support via `NSScreen.screens`
-2. **Wallpaper Setter**: ✅ `AppleScriptRunner` with fallback to `NSWorkspace`
+2. **Wallpaper Setter**: ✅ `NSWorkspace.setDesktopImageURL` (AppleScript removed)
 3. **Image Processing**: ✅ Wallpaper caching and management
 4. **Storage**: ✅ `WallpaperManager` for history and metadata
+5. **Window Management**: ✅ `WindowStore` in AppDelegate prevents close crashes
 
 **Deliverable**: ✅ Generated wallpapers automatically applied to desktop with gallery support
 
@@ -172,9 +169,11 @@ WeatherWeave/
 │   │   ├── LocationManager.swift          # CoreLocation wrapper
 │   │   ├── WeatherService.swift           # NOAA/Meteo API client
 │   │   ├── PromptBuilder.swift            # Weather → AI prompt
-│   │   ├── ImageGenerator.swift           # Z-Image/Draw Things integration (uses bundled Python)
-│   │   ├── WallpaperManager.swift         # Display & wallpaper setter
-│   │   └── AIModelManager.swift           # Manages AI model download & status
+│   │   ├── ImageGenerator.swift           # Legacy (not used; kept for reference)
+│   │   ├── CoreMLImageGenerator.swift     # Active: ml-stable-diffusion pipeline
+│   │   ├── OnDeviceModelConverter.swift   # Downloads model from Hugging Face
+│   │   ├── WallpaperManager.swift         # Display & wallpaper setter (NSWorkspace)
+│   │   └── AIModelManager.swift           # Legacy model manager (not active)
 │   ├── Models/
 │   │   ├── WeatherCondition.swift         # Weather data model
 │   │   ├── Theme.swift                    # Theme presets
@@ -263,22 +262,14 @@ WeatherWeave/
     git clone https://github.com/adityak74/WeatherWeave.git
     cd WeatherWeave
     ```
-2.  **Add Python Bundling Build Phase (one-time setup)**:
-    *   Open `WeatherWeave.xcodeproj` in Xcode.
-    *   Select the `WeatherWeave` target.
-    *   Go to "Build Phases".
-    *   Add a "New Run Script Phase" named "Bundle Python Environment".
-    *   Drag it after "Target Dependencies" and before "Compile Sources".
-    *   Paste `"${PROJECT_DIR}/Scripts/bundle_python_env.sh"` into the script area and ensure "Run script only when installing" is unchecked.
-3.  **Build and Run**:
-    *   Select your Mac as the target device in Xcode.
-    *   Press `Cmd+R` to build and run.
-    *   Grant location permission when prompted.
-4.  **Download AI Model**:
-    *   Open the app's settings (from the menu bar icon).
-    *   Navigate to the "AI Models" section.
-    *   Click "Download AI Model" and wait for the download to complete (can take several minutes due to model size).
-5.  Enjoy dynamic weather wallpapers!
+2.  **Open in Xcode** — Swift Package Manager will resolve `apple/ml-stable-diffusion` automatically.
+3.  **Build and Run** (`Cmd+R`). Grant location permission when prompted.
+4.  **Download AI Model** (first run only):
+    *   Click the menu bar icon → **Settings**
+    *   Under **Core ML Model**, click **Download & Convert Model**
+    *   Wait for the ~4.3 GB download to complete (progress shown per-file)
+    *   Status will change to **Ready**
+5.  Click **Generate Wallpaper** and enjoy!
 
 ### Development Workflow
 1. Start with Phase 1 (location + weather)
@@ -292,13 +283,10 @@ WeatherWeave/
 
 ### Documentation
 - [CoreLocation Framework](https://developer.apple.com/documentation/corelocation)
-- [NOAA Weather API](https://www.weather.gov/documentation/services-web-api)
-- [Open-Meteo API](https://open-meteos.com/en/docs)
+- [Open-Meteo API](https://open-meteo.com/en/docs)
 - [SwiftUI Menu Bar Apps](https://sarunw.com/posts/swiftui-menu-bar-app/)
-- [Hugging Face `diffusers`](https://huggingface.co/docs/diffusers)
-- [MLX](https://github.com/ml-explore)
-- [zimageapp/z-image-turbo-q4](https://huggingface.co/zimageapp/z-image-turbo-q4)
-- [Draw Things](https://drawthings.ai)
+- [apple/ml-stable-diffusion](https://github.com/apple/ml-stable-diffusion)
+- [apple/coreml-stable-diffusion-2-1-base](https://huggingface.co/apple/coreml-stable-diffusion-2-1-base)
 
 ### Example Prompts
 ```
@@ -329,17 +317,19 @@ clean composition, serene, wabi-sabi aesthetic"
 
 ## Recent Updates
 
-### Core ML Migration (Feb 2026)
-**Decision**: Migrated from Python/MLX to native Core ML
-- **Rationale**: Better user experience, industry standard approach
-- **Implementation**: On-device conversion like Draw Things, DiffusionBee
-- **Result**: 93% smaller app, 10x faster generation
+### End-to-End Pipeline Working (Feb 2026)
+- Full generation flow: location → weather → prompt → Core ML → wallpaper applied
+- Model: `apple/coreml-stable-diffusion-2-1-base` split_einsum/compiled (~4.3GB)
+- Download: file-by-file via HuggingFace API with progress tracking
+- Generation: `cpuAndGPU` + `reduceMemory: true` + 12 steps (~30-60s)
+- Wallpaper setter: `NSWorkspace.setDesktopImageURL` (no AppleScript permissions needed)
+- Settings/Gallery: open as `NSWindow` via `WindowStore` (no close crash)
 
-### Key Improvements
-- ⚡ Generation: 15-30s → <1s (19x faster)
-- 📦 App Size: 700MB → 50MB (93% smaller)
-- 🔋 Battery: Significantly better (Neural Engine)
-- 🚀 Setup: One-time 2-3 min conversion, instant forever after
+### Key Architecture Facts
+- **App binary**: ~50MB (model downloaded separately at first run)
+- **Model storage**: `~/Library/Application Support/WeatherWeave/Models/CoreML/`
+- **No Python**: pure Swift + Core ML
+- **Deployment target**: macOS 13.1+
 
 ---
 
