@@ -9,7 +9,7 @@
     A lightweight menu bar app that generates stunning wallpapers based on your current weather—completely on-device using Apple Silicon.
   </p>
 
-[![macOS](https://img.shields.io/badge/macOS-13.0+-blue.svg)](https://www.apple.com/macos/)
+[![macOS](https://img.shields.io/badge/macOS-13.1+-blue.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
@@ -28,13 +28,13 @@ WeatherWeave brings your desktop to life by automatically generating beautiful w
 
 - **🎨 Dynamic & Contextual**: Your wallpaper reflects the world outside your window
 - **🔒 Privacy-First**: Zero cloud processing, zero data collection, 100% on-device
-- **⚡ Powered by Apple Silicon**: Leverages M-series GPU for fast, efficient AI generation
+- **⚡ Powered by Apple Silicon**: Native Core ML on M-series GPU — no Python, no external runtime
 - **🎯 Set and Forget**: Smart automation keeps your desktop fresh without manual intervention
 
 ## ✨ Features
 
 - **Weather-Aware Generation**: Automatically creates wallpapers matching current weather conditions
-- **100% Local AI Processing**: All generation happens on your Mac using Z-Image (MLX/Diffusers) or Draw Things
+- **100% Local AI Processing**: All generation happens on your Mac using native Core ML (Apple's ml-stable-diffusion)
 - **Complete Privacy**: No cloud APIs, no telemetry, no data collection—works entirely offline after setup
 - **Smart Automation**:
   - Updates every 30 minutes (configurable)
@@ -51,7 +51,7 @@ WeatherWeave brings your desktop to life by automatically generating beautiful w
 
 | Component    | Requirement                     |
 | ------------ | ------------------------------- |
-| **OS**       | macOS 13.0 (Ventura) or later   |
+| **OS**       | macOS 13.1 (Ventura) or later   |
 | **Hardware** | Apple Silicon Mac (M1/M2/M3/M4) |
 | **RAM**      | 8GB+ recommended                |
 | **Storage**  | 5GB+ free space for AI models   |
@@ -60,7 +60,6 @@ WeatherWeave brings your desktop to life by automatically generating beautiful w
 
 - **Xcode** 15.0+
 - **Swift** 5.9+
-- **Python** 3.10+ (bundled at build time)
 - **Git** for version control
 
 ## 🚀 Installation
@@ -74,35 +73,30 @@ WeatherWeave brings your desktop to life by automatically generating beautiful w
    cd WeatherWeave
    ```
 
-2. **Set up Python bundling** (one-time setup)
+2. **Open and build in Xcode**
 
-   - Open `WeatherWeave.xcodeproj` in Xcode
-   - Select the `WeatherWeave` target
-   - Go to **Build Phases** → Add **New Run Script Phase**
-   - Name it "Bundle Python Environment"
-   - Paste the following script:
-     ```bash
-     "${PROJECT_DIR}/Scripts/bundle_python_env.sh"
-     ```
-   - Ensure "Run script only when installing" is **unchecked**
+   ```bash
+   open WeatherWeave.xcodeproj
+   ```
 
-3. **Build and run**
-
-   - Select your Mac as the target device in Xcode
+   - Select your Mac as the target device
    - Press `Cmd+R` to build and run
    - Grant location permission when prompted
 
-4. **Download AI models** (first run)
+3. **Download the AI model** (first run, ~4.3 GB)
 
-   - Open the app's settings from the menu bar
-   - Navigate to **AI Models** section
-   - Click **Download AI Model** (may take several minutes)
-   - Wait for download to complete
+   - Click the WeatherWeave icon in your menu bar
+   - Click **Settings**
+   - Under **Core ML Model**, click **Download & Convert Model**
+   - Wait for the download to complete — progress updates as each model file downloads
+   - When Status shows **Ready**, the model is installed at
+     `~/Library/Application Support/WeatherWeave/Models/CoreML/`
 
-5. **Generate your first wallpaper**
+4. **Generate your first wallpaper**
    - Click the WeatherWeave menu bar icon
-   - Select **Generate Wallpaper**
-   - Wait ~15-25 seconds for AI generation
+   - Select a theme, then click **Generate Wallpaper**
+   - Wait ~30–60 seconds for the first generation (pipeline loads into memory)
+   - Subsequent generations are faster
    - Enjoy your weather-aware wallpaper!
 
 ## 🎯 Usage
@@ -111,7 +105,7 @@ WeatherWeave brings your desktop to life by automatically generating beautiful w
 
 1. **Launch WeatherWeave** from Applications
 2. **Grant location permission** in System Settings when prompted
-3. **Wait for AI model download** (first run only, ~5GB)
+3. **Download the AI model** via Settings → Core ML Model → Download & Convert Model (~4.3 GB, one-time)
 4. **Click the menu bar icon** to access controls
 
 ### Menu Bar Interface
@@ -160,13 +154,13 @@ WeatherWeave intelligently crafts prompts based on weather:
 
 ### Development Roadmap
 
-| Phase       | Status         | Focus            | Key Deliverables                                   |
-| ----------- | -------------- | ---------------- | -------------------------------------------------- |
-| **Phase 1** | ✅ Complete    | Foundation       | Location services, weather API, basic UI           |
-| **Phase 2** | ✅ Complete    | AI Integration   | Z-Image pipeline, model management, bundled Python |
-| **Phase 3** | 🚧 In Progress | Wallpaper System | Display detection, wallpaper setter, multi-monitor |
-| **Phase 4** | ⏳ Planned     | Automation       | Timer system, wake detection, smart updates        |
-| **Phase 5** | ⏳ Planned     | Polish           | UI refinement, error handling, optimization        |
+| Phase       | Status      | Focus            | Key Deliverables                                       |
+| ----------- | ----------- | ---------------- | ------------------------------------------------------ |
+| **Phase 1** | ✅ Complete | Foundation       | Location services, weather API, basic UI               |
+| **Phase 2** | ✅ Complete | AI Integration   | Native Core ML pipeline, in-app model download         |
+| **Phase 3** | ✅ Complete | Wallpaper System | Display detection, NSWorkspace setter, multi-monitor   |
+| **Phase 4** | ⏳ Planned  | Automation       | Timer system, wake detection, smart updates            |
+| **Phase 5** | ⏳ Planned  | Polish           | UI refinement, error handling, optimization            |
 
 ### Building from Source
 
@@ -175,9 +169,6 @@ WeatherWeave intelligently crafts prompts based on weather:
    ```bash
    # Ensure you have Xcode 15.0+ installed
    xcode-select --install
-
-   # Verify Python 3.10+ is available
-   python3 --version
    ```
 
 2. **Clone and build**
@@ -186,13 +177,13 @@ WeatherWeave intelligently crafts prompts based on weather:
    git clone https://github.com/adityak74/WeatherWeave.git
    cd WeatherWeave
    open WeatherWeave.xcodeproj
+   # Xcode will automatically resolve the ml-stable-diffusion Swift package
    ```
 
-3. **Configure build phases** (see Installation section)
+3. **Run** (`Cmd+R`) and download the model from Settings on first launch
 
 4. **Run tests** (when available)
    ```bash
-   # Run unit tests
    xcodebuild test -scheme WeatherWeave -destination 'platform=macOS'
    ```
 
@@ -246,10 +237,9 @@ WeatherWeave intelligently crafts prompts based on weather:
 
 - **Frontend**: SwiftUI
 - **Backend Services**: CoreLocation, URLSession
-- **AI Generation**: Stable Diffusion (via MLX/Diffusers)
-- **Python Runtime**: Bundled virtual environment
-- **AI Model**: `zimageapp/z-image-turbo-q4` (Hugging Face)
-- **Wallpaper Engine**: AppleScript + NSWorkspace
+- **AI Generation**: Native Core ML via [apple/ml-stable-diffusion](https://github.com/apple/ml-stable-diffusion)
+- **AI Model**: `apple/coreml-stable-diffusion-2-1-base` (split_einsum, ~4.3 GB)
+- **Wallpaper Engine**: NSWorkspace
 - **Scheduling**: Timer + NSWorkspace wake notifications
 
 ### Project Structure
@@ -318,15 +308,14 @@ After initial model download, WeatherWeave works completely offline.
 
 ### Image Generation Fails
 
-- Verify Python dependencies are bundled (check build logs)
-- Check available disk space (5GB+ required for models)
-- Review logs in Console.app for detailed errors
+- Ensure the model is fully downloaded (Settings → Core ML Model → Status: Ready)
+- Check available disk space (5GB+ required)
+- Review logs in Console.app — search for "WeatherWeave" for detailed errors
 
 ### Wallpaper Not Changing
 
-- Check **System Settings** → **Privacy & Security** → **Full Disk Access**
-- Grant permission to WeatherWeave if requested
-- Verify AppleScript permissions in **System Settings** → **Privacy & Security** → **Automation**
+- macOS may prompt for wallpaper-change permission the first time — click Allow
+- Check **System Settings** → **Privacy & Security** → **Full Disk Access** if denied
 
 ### Model Download Stuck
 
@@ -377,9 +366,9 @@ Contributions are welcome! Here's how you can help:
 ### MVP (Current Focus)
 
 - [x] Location and weather integration
-- [x] AI model integration with bundled Python
-- [x] In-app AI model management
-- [ ] Wallpaper application system
+- [x] Native Core ML image generation (apple/ml-stable-diffusion)
+- [x] In-app model download from Hugging Face
+- [x] Wallpaper application system (NSWorkspace, multi-monitor)
 - [ ] Smart automation and scheduling
 - [ ] UI polish and error handling
 
@@ -427,8 +416,8 @@ See [LICENSE](LICENSE) file for full details.
 
 - **Built with** [SwiftUI](https://developer.apple.com/xcode/swiftui/) and [CoreLocation](https://developer.apple.com/documentation/corelocation)
 - **Weather data** from [Open-Meteo](https://open-meteo.com) (free, no API key required)
-- **AI generation** powered by [Stable Diffusion](https://github.com/Stability-AI/stablediffusion) via [MLX](https://github.com/ml-explore/mlx) and [Diffusers](https://github.com/huggingface/diffusers)
-- **AI model** [zimageapp/z-image-turbo-q4](https://huggingface.co/zimageapp/z-image-turbo-q4) from Hugging Face
+- **AI generation** powered by [apple/ml-stable-diffusion](https://github.com/apple/ml-stable-diffusion) (native Core ML)
+- **AI model** [apple/coreml-stable-diffusion-2-1-base](https://huggingface.co/apple/coreml-stable-diffusion-2-1-base) from Hugging Face
 - **Inspired by** the beauty of weather, nature, and the power of on-device AI
 
 ## 💬 Support
